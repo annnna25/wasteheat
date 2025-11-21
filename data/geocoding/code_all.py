@@ -9,12 +9,21 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 # --- 2. Excel einlesen ---
-excel_path = 'data/geocoding/pfa_datentabelle_excel Kopie.xlsx'
-df = pd.read_excel(excel_path)
+excel_path = 'data/pfa_datentabelle_excel Kopie.xlsx'
+df = pd.read_excel(excel_path, sheet_name='Abwärmepotentiale')
+
+# Use the first row as headers (it contains the actual column names)
+df.columns = df.iloc[0]
+df = df[1:]  # Skip the header row
+df.reset_index(drop=True, inplace=True)
 
 # --- 3. Relevante Spalten auswählen ---
-# Passe hier die Spaltennamen genau an, wie sie in deinem Screenshot sind
-df = df[['Straße und Hausnummer', 'PLZ', 'Ort', 'Wärmemenge pro Jahr (in kWh/a)']]
+# Clean up column names by removing line breaks and extra characters
+df.columns = df.columns.str.replace('\n', ' ').str.replace('_x000d_', '').str.strip()
+
+# Select relevant columns (accounting for column name variations)
+relevant_cols = ['Straße und Hausnummer', 'PLZ', 'Ort', 'Wärmemenge pro Jahr (in kWh/a)']
+df = df[relevant_cols]
 df.dropna(subset=['Straße und Hausnummer', 'PLZ', 'Ort'], inplace=True)
 
 # --- 4. Adressen zusammenführen ---
