@@ -1,7 +1,4 @@
-# code_all.py
-# Komplettes Script für Geocoding, Clustering und Mapping
-# Mit automatischer Speicherung von nicht gefundenen Adressen
-# Benötigte Bibliotheken: pandas, geopandas, geopy, matplotlib, sklearn
+# --- code_all.py ---
 
 # --- 1. Bibliotheken importieren ---
 import pandas as pd
@@ -11,57 +8,42 @@ from geopy.extra.rate_limiter import RateLimiter
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
-# --- 2. Daten einlesen ---
-# Ersetze 'data.csv' mit dem Pfad zu deiner CSV-Datei mit Spalten:
-# Straße, Hausnummer, PLZ, Ort, kWh
-df = pd.read_csv('data/data.csv')  # Beispielpfad
+# --- 2. Excel einlesen ---
+excel_path = 'data/geocoding/pfa_datentabelle_excel Kopie.xlsx'
+df = pd.read_excel(excel_path)
 
-print(f"Daten eingelesen: {len(df)} Zeilen.")
+# --- 3. Relevante Spalten auswählen ---
+# Passe hier die Spaltennamen genau an, wie sie in deinem Screenshot sind
+df = df[['Straße', 'Hausnummer', 'Postleitzahl', 'Ort', 'kWh pro Jahr']]
+df.dropna(subset=['Straße', 'Hausnummer', 'Postleitzahl', 'Ort'], inplace=True)
 
-# --- 3. Adressen zusammenführen ---
-df['full_address'] = df['Straße'] + ' ' + df['Hausnummer'] + ', ' + df['PLZ'].astype(str) + ' ' + df['Ort']
+# --- 4. Adressen zusammenführen ---
+df['Adresse'] = df['Straße'] + ' ' + df['Hausnummer'] + ', ' + df['Postleitzahl'].astype(str) + ' ' + df['Ort']
 
-# --- 4. Geocoding: Adressen in Koordinaten umwandeln ---
-geolocator = Nominatim(user_agent="wasteheat_app")
-geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)  # Vermeidet Sperren bei vielen Anfragen
+# --- 5. Geocoding ---
+geolocator = Nominatim(user_agent="wasteheat_geocoder")
+geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
 
-print("Starte Geocoding...")
-df['location'] = df['full_address'].apply(geocode)
+df['location'] = df['Adresse'].apply(geocode)
+df['Latitude'] = df['location'].apply(lambda loc: loc.latitude if loc else None)
+df['Longitude'] = df['location'].apply(lambda loc: loc.longitude if loc else None)
 
-# Latitude und Longitude extrahieren
-df['latitude'] = df['location'].apply(lambda loc: loc.latitude if loc else None)
-df['longitude'] = df['location'].apply(lambda loc: loc.longitude if loc else None)
+# --- 6. GeoDataFrame erstellen ---
+gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['Longitude'], df['Latitude']))
 
-# --- 4a. Nicht gefundene Adressen speichern ---
-missing_coords = df[df['latitude'].isnull() | df['longitude'].isnull()]
-if not missing_coords.empty:
-    print(f"{len(missing_coords)} Adressen konnten nicht gefunden werden. Speichere in 'missing_addresses.csv'.")
-    missing_coords.to_csv('data/missing_addresses.csv', index=False)
-else:
-    print("Alle Adressen erfolgreich geocodiert.")
-
-# --- 5. Geodataframe erstellen ---
-gdf = gpd.GeoDataFrame(df.dropna(subset=['latitude', 'longitude']),  # Nur gültige Koordinaten
-                       geometry=gpd.points_from_xy(df.dropna(subset=['latitude', 'longitude']).longitude,
-                                                   df.dropna(subset=['latitude', 'longitude']).latitude))
-gdf.crs = "EPSG:4326"  # Standard-Koordinatensystem
-
-# --- 6. Clustering (z. B. KMeans) ---
-coords = gdf[['longitude', 'latitude']]
-n_clusters = 5  # Anzahl Cluster anpassen, falls gewünscht
-kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-gdf['cluster'] = kmeans.fit_predict(coords)
-print(f"Clustering abgeschlossen: {n_clusters} Cluster erstellt.")
-
-# --- 7. Karte plotten ---
-fig, ax = plt.subplots(figsize=(10, 10))
-gdf.plot(ax=ax, column='cluster', cmap='Set1', legend=True, markersize=50)
-plt.title("Clustering der Standorte")
+# --- 7. Punkte plotten ---
+gdf.plot(marker='o', color='red', markersize=5)
+plt.title("Geocodierte Standorte")
 plt.show()
 
-# --- 8. Daten speichern ---
-gdf.to_file('data/geodataframe.geojson', driver='GeoJSON')  # GeoJSON speichern
-df.to_csv('data/output_with_coordinates.csv', index=False)  # CSV speichern
+# --- 8. KMeans-Clustering ---
+coords = df[['Latitude', 'Longitude']].dropna()
+kmeans = KMeans(n_clusters=5, random_state=0).fit(coords)
+df.loc[coords.index, 'Cluster'] = kmeans.labels_
 
-print("Script fertig! Geo-Daten, Cluster und nicht gefundene Adressen wurden gespeichert.")
+# --- 9. Ergebnisse anzeigen ---
+print(df.head())
 
+# --- Optional: In neue Excel speichern ---
+df.to_excel('data/geocoding/pfa_geocoded.xlsx', index=False)
+# --- Ende des Codes ---
