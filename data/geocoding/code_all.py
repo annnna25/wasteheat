@@ -14,11 +14,11 @@ df = pd.read_excel(excel_path)
 
 # --- 3. Relevante Spalten auswählen ---
 # Passe hier die Spaltennamen genau an, wie sie in deinem Screenshot sind
-df = df[['Straße', 'Hausnummer', 'Postleitzahl', 'Ort', 'kWh pro Jahr']]
-df.dropna(subset=['Straße', 'Hausnummer', 'Postleitzahl', 'Ort'], inplace=True)
+df = df[['Straße und Hausnummer', 'PLZ', 'Ort', 'Wärmemenge pro Jahr (in kWh/a)']]
+df.dropna(subset=['Straße und Hausnummer', 'PLZ', 'Ort'], inplace=True)
 
 # --- 4. Adressen zusammenführen ---
-df['Adresse'] = df['Straße'] + ' ' + df['Hausnummer'] + ', ' + df['Postleitzahl'].astype(str) + ' ' + df['Ort']
+df['Adresse'] = df['Straße und Hausnummer'] + ', ' + df['PLZ'].astype(str) + ' ' + df['Ort']
 
 # --- 5. Geocoding ---
 geolocator = Nominatim(user_agent="wasteheat_geocoder")
