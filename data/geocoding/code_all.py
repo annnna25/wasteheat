@@ -1,5 +1,6 @@
 # code_all.py
 # Komplettes Script für Geocoding, Clustering und Mapping
+# Mit automatischer Speicherung von nicht gefundenen Adressen
 # Benötigte Bibliotheken: pandas, geopandas, geopy, matplotlib, sklearn
 
 # --- 1. Bibliotheken importieren ---
@@ -15,35 +16,42 @@ import matplotlib.pyplot as plt
 # Straße, Hausnummer, PLZ, Ort, kWh
 df = pd.read_csv('data/data.csv')  # Beispielpfad
 
+print(f"Daten eingelesen: {len(df)} Zeilen.")
+
 # --- 3. Adressen zusammenführen ---
-# Eine neue Spalte 'full_address' erstellen
 df['full_address'] = df['Straße'] + ' ' + df['Hausnummer'] + ', ' + df['PLZ'].astype(str) + ' ' + df['Ort']
 
 # --- 4. Geocoding: Adressen in Koordinaten umwandeln ---
 geolocator = Nominatim(user_agent="wasteheat_app")
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)  # Vermeidet Sperren bei vielen Anfragen
 
+print("Starte Geocoding...")
 df['location'] = df['full_address'].apply(geocode)
 
-# Prüfen, ob Adressen gefunden wurden
+# Latitude und Longitude extrahieren
 df['latitude'] = df['location'].apply(lambda loc: loc.latitude if loc else None)
 df['longitude'] = df['location'].apply(lambda loc: loc.longitude if loc else None)
 
-# Optional: Fehlende Koordinaten prüfen
+# --- 4a. Nicht gefundene Adressen speichern ---
 missing_coords = df[df['latitude'].isnull() | df['longitude'].isnull()]
 if not missing_coords.empty:
-    print("Folgende Adressen konnten nicht gefunden werden:")
-    print(missing_coords[['full_address']])
+    print(f"{len(missing_coords)} Adressen konnten nicht gefunden werden. Speichere in 'missing_addresses.csv'.")
+    missing_coords.to_csv('data/missing_addresses.csv', index=False)
+else:
+    print("Alle Adressen erfolgreich geocodiert.")
 
 # --- 5. Geodataframe erstellen ---
-gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitude, df.latitude))
+gdf = gpd.GeoDataFrame(df.dropna(subset=['latitude', 'longitude']),  # Nur gültige Koordinaten
+                       geometry=gpd.points_from_xy(df.dropna(subset=['latitude', 'longitude']).longitude,
+                                                   df.dropna(subset=['latitude', 'longitude']).latitude))
 gdf.crs = "EPSG:4326"  # Standard-Koordinatensystem
 
 # --- 6. Clustering (z. B. KMeans) ---
-# Wir nehmen hier 5 Cluster als Beispiel, kann angepasst werden
 coords = gdf[['longitude', 'latitude']]
-kmeans = KMeans(n_clusters=5, random_state=0)
+n_clusters = 5  # Anzahl Cluster anpassen, falls gewünscht
+kmeans = KMeans(n_clusters=n_clusters, random_state=0)
 gdf['cluster'] = kmeans.fit_predict(coords)
+print(f"Clustering abgeschlossen: {n_clusters} Cluster erstellt.")
 
 # --- 7. Karte plotten ---
 fig, ax = plt.subplots(figsize=(10, 10))
@@ -52,7 +60,8 @@ plt.title("Clustering der Standorte")
 plt.show()
 
 # --- 8. Daten speichern ---
-gdf.to_file('data/geodataframe.geojson', driver='GeoJSON')  # als GeoJSON speichern
-df.to_csv('data/output_with_coordinates.csv', index=False)  # als CSV speichern
+gdf.to_file('data/geodataframe.geojson', driver='GeoJSON')  # GeoJSON speichern
+df.to_csv('data/output_with_coordinates.csv', index=False)  # CSV speichern
 
-print("Script fertig! Geo-Daten und Cluster wurden erstellt.")
+print("Script fertig! Geo-Daten, Cluster und nicht gefundene Adressen wurden gespeichert.")
+
